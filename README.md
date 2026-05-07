@@ -4,6 +4,11 @@ A polished AI developer tool MVP that turns a public GitHub repository into a re
 
 The app accepts a repo URL, fetches real GitHub metadata and structure, reads key source files, and asks an LLM to generate a specific report with architecture analysis, ELI5 explanation, code flow, and startup/interview framing.
 
+## Free Mode vs AI Mode
+
+- **Free Heuristic Mode (default)**: If you do not set `OPENAI_API_KEY`, the app still works. It generates a polished report using rule-based heuristics from GitHub metadata, README/dependency files, and the repository tree.
+- **AI Mode**: If you add `OPENAI_API_KEY`, the app uses an LLM to produce deeper, more specific explanations and stronger recruiter/founder framing.
+
 ## Tech Stack
 
 - Next.js (App Router, TypeScript)
@@ -46,9 +51,9 @@ npm install
 cp .env.example .env.local
 ```
 
-3. Add required environment variables:
+3. Add environment variables:
 
-- `OPENAI_API_KEY` (required)
+- `OPENAI_API_KEY` (optional, enables AI Mode)
 - `GITHUB_TOKEN` (optional but recommended for higher GitHub API rate limits)
 
 4. Run the app:

@@ -54,7 +54,7 @@ function safeParseResponse(raw: string): AnalyzeRepoResponse {
 export async function generateAnalysis(context: RepoAnalysisContext): Promise<AnalyzeRepoResponse> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY. Add it in your .env.local file.");
+    throw new Error("AI mode is not configured.");
   }
 
   const response = await fetch(OPENAI_ENDPOINT, {

@@ -31,6 +31,27 @@ body {
     radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.08), transparent 40%),
     radial-gradient(circle at 80% 0%, rgba(168, 85, 247, 0.08), transparent 40%),
     radial-gradient(circle at 50% 90%, rgba(236, 72, 153, 0.06), transparent 50%);
+  background-size: 140% 140%;
+  animation: bgDrift 24s ease-in-out infinite;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  body {
+    cursor: none;
+  }
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  [role="button"] {
+    cursor: none;
+  }
 }
 
 body::before {
@@ -45,6 +66,34 @@ body::before {
   pointer-events: none;
   z-index: 0;
   animation: gridShift 16s linear infinite;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.14;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  animation: noiseDrift 10s linear infinite;
+}
+
+body::selection {
+  background: rgba(34, 211, 238, 0.22);
+}
+
+@keyframes bgDrift {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
 }
 
 @keyframes blob {
@@ -69,6 +118,15 @@ body::before {
   }
   100% {
     transform: translateY(0);
+  }
+}
+
+@keyframes noiseDrift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-24px, 16px, 0);
   }
 }
 

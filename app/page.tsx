@@ -11,6 +11,15 @@ const loadingSteps = [
   "Building ELI5 explanation"
 ];
 
+const liveUpdates = [
+  "Parsing repository structure…",
+  "Inspecting dependency graph…",
+  "Detecting architectural patterns…",
+  "Reading documentation signals…",
+  "Building recruiter summary…",
+  "Generating ELI5 analogy…"
+];
+
 const EXAMPLE_REPOS = [
   "https://github.com/vercel/next.js",
   "https://github.com/facebook/react",
@@ -42,7 +51,10 @@ export default function HomePage() {
   const [result, setResult] = useState<AnalyzeRepoResponse | null>(null);
   const [error, setError] = useState("");
   const [stepIndex, setStepIndex] = useState(0);
-  const glowRef = useRef<HTMLDivElement>(null);
+  const [analysisMode, setAnalysisMode] = useState<"ai" | "heuristic" | null>(null);
+  const [displayScore, setDisplayScore] = useState(0);
+  const ctaRef = useRef<HTMLButtonElement>(null);
+  const [stream, setStream] = useState<string[]>([]);
 
   const repoName = useMemo(() => {
     const parsed = parseRepoInput(repoUrl);
@@ -50,31 +62,47 @@ export default function HomePage() {
   }, [repoUrl]);
 
   useEffect(() => {
-    let rafId = 0;
-    const target = { x: window.innerWidth / 2, y: 180 };
-    const current = { ...target };
+    if (!result) return;
+    const start = performance.now();
+    const from = 0;
+    const to = result.architectureScore;
+    const durationMs = 900;
+    let raf = 0;
 
-    const onMove = (event: MouseEvent) => {
-      target.x = event.clientX;
-      target.y = event.clientY;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplayScore(Math.round(from + (to - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
     };
 
-    const animate = () => {
-      current.x += (target.x - current.x) * 0.12;
-      current.y += (target.y - current.y) * 0.12;
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [result]);
 
-      if (glowRef.current) {
-        glowRef.current.style.transform = `translate(${current.x - 220}px, ${current.y - 220}px)`;
-      }
-      rafId = window.requestAnimationFrame(animate);
+  useEffect(() => {
+    const button = ctaRef.current;
+    if (!button) return;
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+
+    const handleMove = (event: PointerEvent) => {
+      const rect = button.getBoundingClientRect();
+      const dx = event.clientX - (rect.left + rect.width / 2);
+      const dy = event.clientY - (rect.top + rect.height / 2);
+      const x = Math.max(-14, Math.min(14, dx * 0.12));
+      const y = Math.max(-10, Math.min(10, dy * 0.12));
+      button.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     };
 
-    window.addEventListener("mousemove", onMove);
-    animate();
+    const handleLeave = () => {
+      button.style.transform = "translate3d(0,0,0)";
+    };
 
+    button.addEventListener("pointermove", handleMove);
+    button.addEventListener("pointerleave", handleLeave);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.cancelAnimationFrame(rafId);
+      button.removeEventListener("pointermove", handleMove);
+      button.removeEventListener("pointerleave", handleLeave);
     };
   }, []);
 
@@ -88,11 +116,61 @@ export default function HomePage() {
     return () => window.clearInterval(timer);
   }, [isLoading]);
 
+  useEffect(() => {
+    if (!isLoading) return;
+    setStream([]);
+    let i = 0;
+    const timer = window.setInterval(() => {
+      setStream((prev) => {
+        const next = [...prev, liveUpdates[i % liveUpdates.length]];
+        return next.slice(-7);
+      });
+      i += 1;
+    }, 520);
+    return () => window.clearInterval(timer);
+  }, [isLoading]);
+
+  useEffect(() => {
+    const selector = "[data-tilt='card']";
+    const els = Array.from(document.querySelectorAll<HTMLElement>(selector));
+    if (!els.length) return;
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+
+    const onMove = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      const card = target?.closest<HTMLElement>(selector);
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      const px = (event.clientX - rect.left) / rect.width;
+      const py = (event.clientY - rect.top) / rect.height;
+      const rx = (py - 0.5) * -7;
+      const ry = (px - 0.5) * 9;
+      card.style.transform = `translateY(-4px) rotateX(${rx}deg) rotateY(${ry}deg)`;
+      card.style.borderColor = "rgba(125, 211, 252, 0.45)";
+    };
+
+    const onLeave = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      const card = target?.closest<HTMLElement>(selector);
+      if (!card) return;
+      card.style.transform = "";
+      card.style.borderColor = "";
+    };
+
+    document.addEventListener("pointermove", onMove, { passive: true });
+    document.addEventListener("pointerleave", onLeave, { passive: true, capture: true } as any);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerleave", onLeave, true as any);
+    };
+  }, []);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setResult(null);
     setStepIndex(0);
+    setAnalysisMode(null);
 
     const parsed = parseRepoInput(repoUrl);
     if (!parsed) {
@@ -108,6 +186,9 @@ export default function HomePage() {
         body: JSON.stringify({ repoUrl })
       });
 
+      const modeHeader = response.headers.get("x-analysis-mode");
+      setAnalysisMode(modeHeader === "ai" || modeHeader === "heuristic" ? modeHeader : null);
+
       const payload = (await response.json()) as AnalyzeRepoResponse | { error: string };
       if (!response.ok || "error" in payload) {
         throw new Error("error" in payload ? payload.error : "Failed to analyze repository.");
@@ -122,10 +203,6 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 px-4 py-6 text-slate-100 sm:px-6">
-      <div
-        className="pointer-events-none absolute z-0 h-[440px] w-[440px] rounded-full bg-gradient-to-r from-cyan-400/20 via-violet-500/20 to-fuchsia-500/20 blur-3xl"
-        ref={glowRef}
-      />
       <div className="pointer-events-none absolute inset-0">
         <div className="animate-blob-slow absolute -left-24 top-10 h-72 w-72 rounded-full bg-fuchsia-600/30 blur-3xl" />
         <div className="animate-blob absolute right-0 top-1/3 h-80 w-80 rounded-full bg-cyan-500/25 blur-3xl" />
@@ -178,13 +255,16 @@ export default function HomePage() {
                 value={repoUrl}
                 onChange={(event) => setRepoUrl(event.target.value)}
                 placeholder="https://github.com/owner/repo or owner/repo"
+                data-cursor="input"
                 className="w-full rounded-2xl border border-white/15 bg-slate-900/80 px-5 py-3.5 text-sm text-slate-100 shadow-inner shadow-black/20 outline-none transition placeholder:text-slate-400 focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-400/40"
               />
               <div className="relative">
                 <span className="animate-glow-pulse pointer-events-none absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-400/40 via-violet-500/40 to-fuchsia-500/40 blur-md" />
                 <button
+                  ref={ctaRef}
                   type="submit"
                   disabled={isLoading}
+                  data-cursor="button"
                   className="relative rounded-2xl bg-gradient-to-r from-cyan-400 via-violet-500 to-fuchsia-500 px-6 py-3.5 text-sm font-semibold text-white shadow-xl shadow-violet-900/40 transition hover:scale-[1.02] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isLoading ? "Analyzing..." : "Explain this repo"}
@@ -221,6 +301,7 @@ export default function HomePage() {
                 { title: "Code Flow", value: "Real file analysis", tone: "from-emerald-400/30 to-emerald-700/20" }
               ].map((card) => (
                 <article
+                  data-cursor="card"
                   className={`hover-lift rounded-2xl border border-white/10 bg-gradient-to-br ${card.tone} p-4 backdrop-blur`}
                   key={card.title}
                 >
@@ -233,32 +314,77 @@ export default function HomePage() {
         </section>
 
         {isLoading ? (
-          <section className="fade-up mt-6 rounded-3xl border border-cyan-200/20 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-950/50 backdrop-blur fade-delay-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">AI Analysis Pipeline</p>
-            <div className="mt-4 space-y-4">
-              {loadingSteps.map((step, index) => (
-                <div className="flex items-center gap-3" key={step}>
-                  <div
-                    className={`relative flex h-7 w-7 items-center justify-center rounded-full border text-xs font-bold ${
-                      index <= stepIndex
-                        ? "border-cyan-300/50 bg-cyan-400/15 text-cyan-100"
-                        : "border-slate-600/60 bg-slate-700/30 text-slate-300"
-                    }`}
-                  >
-                    {index + 1}
-                    {index === stepIndex ? (
-                      <span className="absolute inset-0 animate-ping rounded-full border border-cyan-300/40" />
-                    ) : null}
-                  </div>
-                  <p className="text-sm text-slate-200">{step}</p>
+          <section className="fade-up mt-6 grid gap-4 lg:grid-cols-5 fade-delay-3">
+            <div className="rounded-3xl border border-cyan-200/20 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-950/50 backdrop-blur lg:col-span-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">AI Analysis Stream</p>
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+                  thinking
+                </span>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4 font-mono text-xs text-slate-200">
+                <div className="space-y-2">
+                  {stream.length ? (
+                    stream.map((line, idx) => (
+                      <div className="flex gap-3" key={`${line}-${idx}`}>
+                        <span className="text-slate-500">$</span>
+                        <span className="text-slate-200">{line}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-slate-400">Booting analysis…</div>
+                  )}
                 </div>
-              ))}
+                <div className="mt-3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-violet-300/80" />
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-cyan-300/80 [animation-delay:120ms]" />
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-fuchsia-300/80 [animation-delay:240ms]" />
+                </div>
+              </div>
+
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full animate-pulse rounded-full bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400 transition-all duration-700"
+                  style={{ width: `${((stepIndex + 1) / loadingSteps.length) * 100}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {loadingSteps.map((step, index) => (
+                  <div className="flex items-center gap-3" key={step}>
+                    <div
+                      className={`relative flex h-7 w-7 items-center justify-center rounded-full border text-xs font-bold ${
+                        index <= stepIndex
+                          ? "border-cyan-300/50 bg-cyan-400/15 text-cyan-100"
+                          : "border-slate-600/60 bg-slate-700/30 text-slate-300"
+                      }`}
+                    >
+                      {index + 1}
+                      {index === stepIndex ? (
+                        <span className="absolute inset-0 animate-ping rounded-full border border-cyan-300/40" />
+                      ) : null}
+                    </div>
+                    <p className="text-sm text-slate-200">{step}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full animate-pulse rounded-full bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400 transition-all duration-700"
-                style={{ width: `${((stepIndex + 1) / loadingSteps.length) * 100}%` }}
-              />
+
+            <div className="rounded-3xl border border-white/15 bg-white/5 p-6 shadow-2xl shadow-black/40 backdrop-blur lg:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-200">Report Preview</p>
+              <div className="mt-4 space-y-3">
+                <div className="h-5 w-2/3 animate-pulse rounded-lg bg-white/10" />
+                <div className="h-3 w-full animate-pulse rounded-lg bg-white/10" />
+                <div className="h-3 w-5/6 animate-pulse rounded-lg bg-white/10" />
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="h-16 animate-pulse rounded-2xl bg-white/10" />
+                  <div className="h-16 animate-pulse rounded-2xl bg-white/10" />
+                  <div className="h-16 animate-pulse rounded-2xl bg-white/10" />
+                  <div className="h-16 animate-pulse rounded-2xl bg-white/10" />
+                </div>
+              </div>
             </div>
           </section>
         ) : null}
@@ -274,6 +400,18 @@ export default function HomePage() {
               </p>
             </div>
 
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  analysisMode === "ai"
+                    ? "border-fuchsia-300/30 bg-fuchsia-400/10 text-fuchsia-100"
+                    : "border-cyan-300/30 bg-cyan-400/10 text-cyan-100"
+                }`}
+              >
+                {analysisMode === "ai" ? "AI Mode" : "Free Heuristic Mode"}
+              </span>
+            </div>
+
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-sm text-slate-300">{result.tagline}</p>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -286,12 +424,20 @@ export default function HomePage() {
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <article className="hover-lift rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-5">
+              <article
+                data-cursor="card"
+                data-tilt="card"
+                className="hover-lift rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-5 [transform-style:preserve-3d]"
+              >
                 <p className="text-xs uppercase tracking-[0.14em] text-cyan-200">Architecture Score</p>
-                <p className="mt-2 text-3xl font-bold text-white">{result.architectureScore}</p>
+                <p className="mt-2 text-3xl font-bold text-white tabular-nums">{displayScore}</p>
                 <p className="mt-2 text-sm text-slate-300">{result.whatItDoes}</p>
               </article>
-              <article className="hover-lift rounded-2xl border border-violet-300/20 bg-violet-500/10 p-5">
+              <article
+                data-cursor="card"
+                data-tilt="card"
+                className="hover-lift rounded-2xl border border-violet-300/20 bg-violet-500/10 p-5 [transform-style:preserve-3d]"
+              >
                 <p className="text-xs uppercase tracking-[0.14em] text-violet-200">Repo Personality</p>
                 <p className="mt-2 text-xl font-semibold text-white">{result.repoPersonality}</p>
                 <ul className="mt-2 space-y-1 text-sm text-slate-300">
@@ -300,11 +446,19 @@ export default function HomePage() {
                   ))}
                 </ul>
               </article>
-              <article className="hover-lift rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/10 p-5">
+              <article
+                data-cursor="card"
+                data-tilt="card"
+                className="hover-lift rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/10 p-5 [transform-style:preserve-3d]"
+              >
                 <p className="text-xs uppercase tracking-[0.14em] text-fuchsia-200">ELI5 Story Mode</p>
                 <p className="mt-2 text-sm text-slate-100">{result.eli5Story}</p>
               </article>
-              <article className="hover-lift rounded-2xl border border-blue-300/20 bg-blue-500/10 p-5">
+              <article
+                data-cursor="card"
+                data-tilt="card"
+                className="hover-lift rounded-2xl border border-blue-300/20 bg-blue-500/10 p-5 [transform-style:preserve-3d]"
+              >
                 <p className="text-xs uppercase tracking-[0.14em] text-blue-200">Code Flow</p>
                 <ul className="mt-3 space-y-2">
                   {result.codeFlow.map((item) => (
@@ -314,7 +468,11 @@ export default function HomePage() {
                   ))}
                 </ul>
               </article>
-              <article className="hover-lift rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-5">
+              <article
+                data-cursor="card"
+                data-tilt="card"
+                className="hover-lift rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-5 [transform-style:preserve-3d]"
+              >
                 <p className="text-xs uppercase tracking-[0.14em] text-emerald-200">What&apos;s Impressive</p>
                 <ul className="mt-3 space-y-2 text-sm text-slate-200">
                   {result.impressiveParts.map((item) => (
@@ -322,7 +480,11 @@ export default function HomePage() {
                   ))}
                 </ul>
               </article>
-              <article className="hover-lift rounded-2xl border border-amber-300/20 bg-amber-500/10 p-5">
+              <article
+                data-cursor="card"
+                data-tilt="card"
+                className="hover-lift rounded-2xl border border-amber-300/20 bg-amber-500/10 p-5 [transform-style:preserve-3d]"
+              >
                 <p className="text-xs uppercase tracking-[0.14em] text-amber-200">Suggested Improvements</p>
                 <ul className="mt-3 space-y-2 text-sm text-slate-200">
                   {result.suggestedImprovements.map((item) => (

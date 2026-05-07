@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateAnalysis } from "../../../lib/ai";
 import { buildRepoContext } from "../../../lib/github";
+import { generateHeuristicAnalysis } from "../../../lib/heuristic";
 import { AnalyzeRepoError, AnalyzeRepoResponse } from "../../../lib/types";
 
 export async function POST(request: Request) {
@@ -15,9 +16,15 @@ export async function POST(request: Request) {
     }
 
     const context = await buildRepoContext(repoUrl);
-    const analysis = await generateAnalysis(context);
+    const hasAiKey = Boolean(process.env.OPENAI_API_KEY);
+    const analysis = hasAiKey ? await generateAnalysis(context) : generateHeuristicAnalysis(context);
 
-    return NextResponse.json<AnalyzeRepoResponse>(analysis, { status: 200 });
+    return NextResponse.json<AnalyzeRepoResponse>(analysis, {
+      status: 200,
+      headers: {
+        "x-analysis-mode": hasAiKey ? "ai" : "heuristic"
+      }
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected server error.";
     const status =

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { CursorOrb } from "../components/CursorOrb";
 
 export const metadata: Metadata = {
   title: "Explain My Repo Like I'm Five",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <CursorOrb />
+        {children}
+      </body>
     </html>
   );
 }
